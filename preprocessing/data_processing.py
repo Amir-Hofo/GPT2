@@ -46,7 +46,7 @@ class CustomDataset(Dataset):
     
 
 
-def data_preparation(dataset, tokenizer, seq_len= 128, batch_size= 32, 
+def data_preparation(dataset, tokenizer, seq_len= 128, batch_size= 64, 
                      shuffle_st= True, all_workers= True):
     data= CustomDataset(dataset, tokenizer, seq_len)
     del dataset, tokenizer
