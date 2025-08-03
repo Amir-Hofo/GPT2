@@ -1,0 +1,9 @@
+{
+    "repo_id": "roneneldan/TinyStories",
+    "vocab_size": 10000,
+    "min_frequency": 2,
+    "save_tokenizer": true,
+    "seq_len": 128,
+    "batch_size": 64,
+    "all_workers": false
+}

@@ -1,24 +1,28 @@
 from packages import *
 
+
+def scales_dot_product_attention_fn(Q, K, V):
+    scores= (Q @ K.transpose(-2, -1)) / math.sqrt(K.shape[-1])
+    mask= torch.tril(torch.ones(scores.shape[-2:])).to(scores.device)
+    scores= scores.masked_fill(mask == 0, float(-torch.inf))
+    return scores.softmax(dim=-1) @ V
+
+
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_heads= config["num heads"]
-        self.feature_dimension= config["feature dimension"]
+        self.num_heads= config.num_heads
+        self.feature_dimension= config.feature_dimension
         self.head_dimension= self.feature_dimension // self.num_heads
-        self.fc1= nn.Linear(self.feature_dimension, 3* self.feature_dimension)
-        self.fc2= nn.Linear(self.feature_dimension, self.feature_dimension)
+        self.fc1= nn.Linear(self.feature_dimension, 3* self.feature_dimension, bias= config.bias)
+        self.fc2= nn.Linear(self.feature_dimension, self.feature_dimension, bias= config.bias)
 
     def forward(self, x):
-        batch_size, seq_len= x.shape[0], x.shape[1]
-        qkv= self.fc1(x).reshape(batch_size, seq_len, self.num_heads, 
-                                 3*(self.head_dimension)).permute(0, 2, 1, 3)
-        Q, K, V= qkv.split(self.head_dimension, dim= -1)
-        del x, qkv
-        sdpa= scaled_dot_product_attention(Q, K, V, is_causal= True)
-        sdpa= sdpa.reshape(batch_size, seq_len, self.feature_dimension)
-        del Q, K, V
-        return self.fc2(sdpa)
+        Q, K, V= self.fc1(x).view(x.shape[0], x.shape[1], 3*self.num_heads, self.head_dimension).transpose(1, 2).chunk(3, dim=-3)
+        x_attention= scales_dot_product_attention_fn(Q, K, V).transpose(1, 2).contiguous().view(x.shape)
+        # x_attention= nn.functional.scaled_dot_product_attention(Q, K, V, is_causal= True).transpose(1, 2).contiguous().view(x.shape)
+        return self.fc2(x_attention)
 
 
 
@@ -26,38 +30,67 @@ class DecoderBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config= config
-        self.feature_dimension= self.config["feature dimension"]
+        self.feature_dimension= self.config.feature_dimension
+        self.ffnn_expand= self.config.ffnn_expand
 
         self.mha_layernorm= nn.LayerNorm(self.feature_dimension)
         self.masked_mha= MultiHeadAttention(self.config)
-        self.mha_dropout= nn.Dropout(self.config["mha dropout"])
+        self.mha_dropout= nn.Dropout(self.config.mha_dropout)
 
         self.ffnn_layernorm= nn.LayerNorm(self.feature_dimension)
-        self.ffnn= nn.Sequential(nn.Linear(self.feature_dimension, 4*self.feature_dimension),
+        self.ffnn= nn.Sequential(nn.Linear(self.feature_dimension, 
+                                           int(self.ffnn_expand* self.feature_dimension), 
+                                           bias= config.bias),
                                  nn.GELU(),
-                                 nn.Linear(4*self.feature_dimension, self.feature_dimension))
-        self.ffnn_dropout= nn.Dropout(self.config["ffnn dropout"])
-
+                                 nn.Linear(int(self.ffnn_expand* self.feature_dimension), 
+                                           self.feature_dimension, bias= config.bias))
+        self.ffnn_dropout= nn.Dropout(self.config.ffnn_dropout)
 
     def forward(self, x):
-        mha= self.mha_dropout(self.masked_mha(self.mha_layernorm(x))) + x
-        ffnn= self.ffnn_dropout(self.ffnn(self.ffnn_layernorm(mha))) + mha
-        return ffnn
+        x+= self.mha_dropout(self.masked_mha(self.mha_layernorm(x)))
+        x+= self.ffnn_dropout(self.ffnn(self.ffnn_layernorm(x)))
+        return x
     
+
+class PytorchDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config= config
+        self.decoder_layer= nn.TransformerEncoderLayer(
+                                        d_model= self.config.feature_dimension,
+                                        nhead= self.config.num_heads,
+                                        dim_feedforward= int(self.config.ffnn_expand * self.config.feature_dimension),
+                                        dropout= self.config.decoder_dropout,
+                                        activation= "gelu",
+                                        batch_first= True)
+        self.decoder = nn.TransformerEncoder(self.decoder_layer, num_layers= self.config.num_layers)
+
+    def forward(self, x):
+        causal_mask= nn.Transformer.generate_square_subsequent_mask(x.size(1)).to(x.device)
+        return self.decoder(x, mask= causal_mask)
+
 
 
 class GPT2Model(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config= config
-        self.token_embedding= nn.Embedding(self.config["vocab size"], self.config["feature dimension"])
-        self.position_embedding= nn.Embedding(self.config["max position"], self.config["feature dimension"])
-        self.dropout= nn.Dropout(self.config["dropout"])
-        self.decoder_blocks= nn.ModuleList([DecoderBlock(self.config) for _ in range(self.config["num layers"])])
-        self.layer_norm= nn.LayerNorm(self.config["feature dimension"])
+        self.token_embedding= nn.Embedding(self.config.vocab_size, self.config.feature_dimension)
+        self.position_embedding= nn.Embedding(self.config.seq_len, self.config.feature_dimension)
+        self.dropout= nn.Dropout(self.config.dropout)
+        
+        if self.config.custom_decoder:
+            self.decoder_blocks= nn.ModuleList([DecoderBlock(self.config) for _ in range(self.config.num_layers)])
+        else: self.decoder= PytorchDecoder(self.config)
+
+        self.layer_norm= nn.LayerNorm(self.config.feature_dimension)
+        self.fc= nn.Linear(self.config.feature_dimension, self.config.vocab_size, bias= self.config.bias)
+        if self.config.weight_tying: self.fc.weight= self.token_embedding.weight
 
     def forward(self, x):
         pos_emb= self.position_embedding(torch.arange(x.size(1), device= x.device))
         x= self.dropout(self.token_embedding(x) + pos_emb)
-        for block in self.decoder_blocks: x= block(x)
-        return self.layer_norm(x)
+        if self.config.custom_decoder:
+            for block in self.decoder_blocks: x= block(x)
+        else: x= self.decoder(x)
+        return self.fc(self.layer_norm(x))

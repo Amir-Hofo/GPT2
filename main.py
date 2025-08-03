@@ -7,23 +7,26 @@ device= "cuda" if torch.cuda.is_available() else "cpu"
 
 ############## Preprocessing ##############
 print_title("Preprocessing")
-dataset= dataset_loader_fn()
+
+with open("config/preprocess_config.json") as f: 
+    preprocess_config= SimpleNamespace(**json.load(f))
+
+dataset= dataset_loader_fn(preprocess_config)
 
 if os.path.exists("./preprocessing/custom_tokenizer_10K.json"):
     tokenizer= Tokenizer.from_file("./preprocessing/custom_tokenizer_10K.json")
-else: tokenizer= tokenizer_fn(dataset)
+else: tokenizer= tokenizer_fn(dataset, preprocess_config)
 
 if os.path.exists("./preprocessing/train_loader.pt"):
     train_loader= torch.load("./preprocessing/train_loader.pt")
 else: 
-    train_loader= data_preparation(dataset["train"], tokenizer)
+    train_loader= data_preparation(dataset["train"], tokenizer, preprocess_config)
     torch.save(train_loader, "./preprocessing/train_loader.pt")
 
 if os.path.exists("./preprocessing/valid_loader.pt"):
     valid_loader= torch.load("./preprocessing/valid_loader.pt")
-
 else:
-    valid_loader= data_preparation(dataset["validation"],tokenizer, shuffle_st= False)
+    valid_loader= data_preparation(dataset["validation"],tokenizer, preprocess_config, shuffle_st= False)
     torch.save(valid_loader, "./preprocessing/valid_loader.pt")
 
 print(10*"- ", "dataloader", 10*" -")
@@ -31,14 +34,15 @@ print("train batch size:",train_loader.batch_size, ", num of batch:", len(train_
 print("valid batch size:",valid_loader.batch_size, ", num of batch:", len(valid_loader))
 
 
+x, y= next(iter(train_loader))
+print("sample data:", x.shape, y.shape)
+
 ################## Model ##################
 print_title("Model")
 
-config= {"num heads": 2, "feature dimension": 10, 
-         "mha dropout": 0.1, "ffnn dropout": 0.1,
-         "vocab size": 50, "max position": 25, #"max position": seq_len
-         "num layers": 2, "dropout": 0.1}
-model= GPT2Model(config)
+with open("config/model_config.json") as f: 
+    custom_gpt2_config= SimpleNamespace(**json.load(f))
+
+model= GPT2Model(custom_gpt2_config)
 print(num_trainable_params(model))
-input= torch.randint(0, config["vocab size"], (4, 3), dtype= torch.long)
-print(model(input).shape)
+print(model(x.long()).shape)

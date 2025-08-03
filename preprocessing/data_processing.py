@@ -1,13 +1,16 @@
 from packages import *
 
 
-def dataset_loader_fn(repo_id= "roneneldan/TinyStories"):
-    return load_dataset(repo_id)
+def dataset_loader_fn(config):
+    return load_dataset(config.repo_id)
 
 
 
-def tokenizer_fn(dataset, vocab_size= 10_000, min_frequency= 2, save_tokenizer= True):
+def tokenizer_fn(dataset, config):
+    vocab_size, min_frequency= config.vocab_size, config.min_frequency
+    save_tokenizer= config.save_tokenizer
     unk, eos= "|<unk>|", "<|endoftext|>"
+
     tokenizer= Tokenizer(models.BPE(unk_token= unk))
     tokenizer.pre_tokenizer= pre_tokenizers.ByteLevel(add_prefix_space= False)
     trainer= trainers.BpeTrainer(vocab_size= vocab_size, 
@@ -31,9 +34,9 @@ def tokenizer_fn(dataset, vocab_size= 10_000, min_frequency= 2, save_tokenizer= 
 
 
 class CustomDataset(Dataset):
-    def __init__(self, data, tokenizer, seq_len):
+    def __init__(self, data, tokenizer, config):
         super().__init__()
-        self.tokenizer, self.seq_len= tokenizer, seq_len+ 1
+        self.tokenizer, self.seq_len= tokenizer, config.seq_len+ 1
         self.data= list(chain.from_iterable(tokenizer.encode(text).ids for text in data["text"]))
         self.num_rows= (len(self.data) // self.seq_len)
         self.data= torch.Tensor(self.data[: self.num_rows * self.seq_len]).reshape(self.num_rows, self.seq_len)
@@ -46,16 +49,16 @@ class CustomDataset(Dataset):
     
 
 
-def data_preparation(dataset, tokenizer, seq_len= 128, batch_size= 64, 
-                     shuffle_st= True, all_workers= True):
-    data= CustomDataset(dataset, tokenizer, seq_len)
+def data_preparation(dataset, tokenizer, config, shuffle_st= True):
+    data= CustomDataset(dataset, tokenizer, config)
     del dataset, tokenizer
     pin_memory= torch.cuda.is_available()
-    if all_workers:
-        data_loader= DataLoader(data, batch_size= batch_size, shuffle= shuffle_st, 
+    if config.all_workers:
+        data_loader= DataLoader(data, batch_size= config.batch_size, shuffle= shuffle_st, 
                                 pin_memory= pin_memory, num_workers= os.cpu_count())
     else:
-        data_loader= DataLoader(data, batch_size= batch_size, shuffle= shuffle_st, pin_memory= pin_memory)
+        data_loader= DataLoader(data, batch_size= config.batch_size, 
+                                shuffle= shuffle_st, pin_memory= pin_memory)
     return data_loader
     
 
