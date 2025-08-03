@@ -7,6 +7,7 @@ import torch
 from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
 from torch.utils.data import Dataset, DataLoader, IterableDataset
+from torch.utils.checkpoint import checkpoint
 
 import numpy as np
 

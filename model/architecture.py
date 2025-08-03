@@ -32,6 +32,7 @@ class DecoderBlock(nn.Module):
         self.config= config
         self.feature_dimension= self.config.feature_dimension
         self.ffnn_expand= self.config.ffnn_expand
+        self.use_checkpoint= config.use_checkpoint
 
         self.mha_layernorm= nn.LayerNorm(self.feature_dimension)
         self.masked_mha= MultiHeadAttention(self.config)
@@ -47,15 +48,27 @@ class DecoderBlock(nn.Module):
         self.ffnn_dropout= nn.Dropout(self.config.ffnn_dropout)
 
     def forward(self, x):
-        x+= self.mha_dropout(self.masked_mha(self.mha_layernorm(x)))
-        x+= self.ffnn_dropout(self.ffnn(self.ffnn_layernorm(x)))
+        if self.config.use_checkpoint:
+            x= x+ self.mha_dropout(checkpoint(self._masked_mha_forward, self.mha_layernorm(x), use_reentrant= False))
+            x= x+ self.ffnn_dropout(checkpoint(self._ffnn_forward, self.ffnn_layernorm(x), use_reentrant= False))
+        else:
+            x= x+ self.mha_dropout(self.masked_mha(self.mha_layernorm(x)))
+            x= x+ self.ffnn_dropout(self.ffnn(self.ffnn_layernorm(x)))
         return x
-    
+
+    def _masked_mha_forward(self, x):
+        return self.masked_mha(x)
+
+    def _ffnn_forward(self, x):
+        return self.ffnn(x)
+
+
 
 class PytorchDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config= config
+        self.use_checkpoint= config.use_checkpoint
         self.decoder_layer= nn.TransformerEncoderLayer(
                                         d_model= self.config.feature_dimension,
                                         nhead= self.config.num_heads,
@@ -67,7 +80,12 @@ class PytorchDecoder(nn.Module):
 
     def forward(self, x):
         causal_mask= nn.Transformer.generate_square_subsequent_mask(x.size(1)).to(x.device)
-        return self.decoder(x, mask= causal_mask)
+        if self.config.use_checkpoint:
+            def checkpoint_wrapper(module, *inputs):
+                return checkpoint(module, *inputs, use_reentrant= False)
+            return checkpoint_wrapper(self.decoder, x, causal_mask)
+        else:
+            return self.decoder(x, mask= causal_mask)
 
 
 
