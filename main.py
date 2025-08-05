@@ -45,4 +45,17 @@ with open("config/model_config.json") as f:
 
 model= GPT2Model(custom_gpt2_config)
 print(num_trainable_params(model))
-print(model(x.long()).shape)
+# print(model)
+
+loss_fn= nn.CrossEntropyLoss()
+if custom_gpt2_config.learning_rate == None:
+    optimizer= torch.optim.AdamW(model.parameters(), lr= 5e-4) 
+    custom_gpt2_config.learning_rate= lr_grid_search(model, train_loader, valid_loader, optimizer, loss_fn, device)
+optimizer= torch.optim.AdamW(model.parameters(), lr= custom_gpt2_config.learning_rate)
+
+model, valid_loss= one_epoch_fn(valid_loader, model, loss_fn, device, status= "train", optimizer= optimizer)
+print(valid_loss)
+
+print(25*" - ")
+prompt= "Once upon a time"
+print(text_generation_fn(model, tokenizer, prompt))

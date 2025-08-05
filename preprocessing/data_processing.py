@@ -45,7 +45,7 @@ class CustomDataset(Dataset):
         return self.num_rows
 
     def __getitem__(self, idx):
-        return self.data[idx, :-1], self.data[idx, -1]
+        return self.data[idx, :-1].long(), self.data[idx, 1:].long()
     
 
 
