@@ -17,6 +17,7 @@ class MultiHeadAttention(nn.Module):
         self.head_dimension= self.feature_dimension // self.num_heads
         self.fc1= nn.Linear(self.feature_dimension, 3* self.feature_dimension, bias= config.bias)
         self.fc2= nn.Linear(self.feature_dimension, self.feature_dimension, bias= config.bias)
+        self.fc2.residual= True
 
     def forward(self, x):
         Q, K, V= self.fc1(x).view(x.shape[0], x.shape[1], 3*self.num_heads, self.head_dimension).transpose(1, 2).chunk(3, dim=-3)
@@ -45,6 +46,7 @@ class DecoderBlock(nn.Module):
                                  nn.GELU(),
                                  nn.Linear(int(self.ffnn_expand* self.feature_dimension), 
                                            self.feature_dimension, bias= config.bias))
+        self.ffnn[-1].residual= True
         self.ffnn_dropout= nn.Dropout(self.config.ffnn_dropout)
 
     def forward(self, x):
@@ -104,6 +106,22 @@ class GPT2Model(nn.Module):
         self.layer_norm= nn.LayerNorm(self.config.feature_dimension)
         self.fc= nn.Linear(self.config.feature_dimension, self.config.vocab_size, bias= self.config.bias)
         if self.config.weight_tying: self.fc.weight= self.token_embedding.weight
+
+        self.apply(self._init_weights)
+
+
+    def _init_weights(self, module, std= 0.02):
+        if isinstance(module, nn.Linear):
+            if hasattr(module, 'residual'):
+                std*= (2* self.config.num_layers)** -0.5
+
+            nn.init.normal_(module.weight, mean= 0.0, std= std)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean= 0.0, std= std)
+
 
     def forward(self, x):
         pos_emb= self.position_embedding(torch.arange(x.size(1), device= x.device))
