@@ -59,16 +59,20 @@ def training_fn(model, train_loader, valid_loader, num_epochs, optimizer, loss_f
 
 
 def text_generation_fn(model, tokenizer, prompt, max_length= 128, temperature= 1.0):
-    input_ids= torch.tensor(tokenizer.encode(prompt), dtype=torch.long).unsqueeze(0).to(model.device)
+    input_ids= torch.tensor(tokenizer.encode(prompt).ids, dtype= torch.int).unsqueeze(0).to(model.device)
+    eos= torch.tensor(tokenizer.encode("<|endoftext|>").ids, dtype= torch.int)[0]
     model.eval()
+
     with torch.inference_mode():
         for _ in range(max_length):
-            logits= model(input_ids)[:, -1, :] / temperature
-            logits= logits.argmax(dim=-1).unsqueeze(-1)
-            input_ids= torch.cat([input_ids, logits], dim= -1)
-            if logits.item() == tokenizer.eos_token_id: break
+            logits= model(input_ids)
+            scores= (logits[0, [-1]] / temperature).softmax(dim= -1)
+            idx= scores.argmax(keepdims= True)
+            input_ids= torch.cat((input_ids, idx), dim= -1)
+            if idx.item() == eos.item(): break
+            if input_ids.shape[1] == max_length: input_ids= input_ids[:, 1:]
 
-    return tokenizer.decode(input_ids.squeeze(0).tolist())
+    return prompt+ " " + tokenizer.decode(input_ids[0].tolist())
 
 
 

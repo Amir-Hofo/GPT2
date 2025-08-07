@@ -53,9 +53,11 @@ if custom_gpt2_config.learning_rate == None:
     custom_gpt2_config.learning_rate= lr_grid_search(model, train_loader, valid_loader, optimizer, loss_fn, device)
 optimizer= torch.optim.AdamW(model.parameters(), lr= custom_gpt2_config.learning_rate)
 
-model, valid_loss= one_epoch_fn(valid_loader, model, loss_fn, device, status= "train", optimizer= optimizer)
-print(valid_loss)
+model, train_loss_history, valid_loss_history= training_fn(model, train_loader, valid_loader, 1, optimizer, loss_fn, device)
+print(valid_loss_history[-1])
 
-print(25*" - ")
-prompt= "Once upon a time"
-print(text_generation_fn(model, tokenizer, prompt))
+model.device= device
+
+print(24*" - ")
+prompt= ["Once upon a time", "my name is"]
+print(text_generation_fn(model, tokenizer, prompt[0]))
