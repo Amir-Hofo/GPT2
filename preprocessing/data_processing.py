@@ -6,7 +6,7 @@ def dataset_loader_fn(config):
 
 
 
-def tokenizer_fn(dataset, config):
+def tokenizer_fn(dataset, config, project_root):
     vocab_size, min_frequency= config.vocab_size, config.min_frequency
     save_tokenizer= config.save_tokenizer
     unk, eos= "|<unk>|", "<|endoftext|>"
@@ -28,7 +28,7 @@ def tokenizer_fn(dataset, config):
 
     tokenizer.decoder= decoders.ByteLevel(add_prefix_space= False)
 
-    if save_tokenizer: tokenizer.save(f"./preprocessing/custom_tokenizer_{vocab_size//1000}K.json")
+    if save_tokenizer: tokenizer.save(f"{project_root}preprocessing/custom_tokenizer_{vocab_size//1000}K.json")
     return tokenizer
 
 

@@ -4,3 +4,5 @@ preprocessing/TinyStories_all_data.tar.gz
 preprocessing/train_loader.pt
 preprocessing/valid_loader.pt
 /model/__pycache__
+debug.py
+model/logs/best-model.pt

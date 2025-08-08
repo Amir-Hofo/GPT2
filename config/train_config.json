@@ -1,0 +1,5 @@
+{
+  "learning_rate": 5e-5,
+  "total_tokens": 9e3,
+  "log_interval_tokens": 8e3
+}

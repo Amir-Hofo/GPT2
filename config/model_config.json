@@ -12,7 +12,5 @@
   "decoder_dropout": 0.0,
   "mha_dropout": 0.0,
   "ffnn_dropout": 0.0,
-  "use_checkpoint": true,
-  "learning_rate": 5e-5,
-  "num_epochs": 2
+  "use_checkpoint": true
 }
