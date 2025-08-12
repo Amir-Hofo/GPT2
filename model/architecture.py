@@ -1,4 +1,5 @@
 from packages import *
+from model.utils import text_generation_fn
 
 
 def scales_dot_product_attention_fn(Q, K, V):
@@ -121,6 +122,10 @@ class GPT2Model(nn.Module):
 
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean= 0.0, std= std)
+
+    
+    def text_generator(self, prompt, tokenizer, max_length= 128, temperature= 1.5, top_k= 5):
+        return text_generation_fn(self, tokenizer, prompt, max_length, temperature, top_k)
 
 
     def forward(self, x):

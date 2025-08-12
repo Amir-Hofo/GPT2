@@ -81,8 +81,8 @@ def print_config_summary(model, optimizer, loss_fn, train_loader, device, total_
 
 
 
-def text_generation_fn(model, tokenizer, prompt, max_length= 12, temperature= 1.0):
-    input_ids= torch.tensor(tokenizer.encode(prompt).ids, dtype= torch.int).unsqueeze(0).to(model.config.device)
+def text_generation_fn(model, tokenizer, prompt, max_length= 128, temperature= 1.5, top_k= 5):
+    input_ids= torch.tensor(tokenizer.encode(prompt).ids, dtype= torch.int).unsqueeze(0).to(model.device)
     eos= torch.tensor(tokenizer.encode("<|endoftext|>").ids, dtype= torch.int)[0]
     model.eval()
 
@@ -90,12 +90,16 @@ def text_generation_fn(model, tokenizer, prompt, max_length= 12, temperature= 1.
         for _ in range(max_length):
             logits= model(input_ids)
             scores= (logits[0, [-1]] / temperature).softmax(dim= -1)
-            idx= scores.argmax(keepdims= True)
-            input_ids= torch.cat((input_ids, idx), dim= -1)
-            if idx.item() == eos.item(): break
+            topk_probs, topk_indices= torch.topk(scores, k= top_k, dim= -1)
+            ids= torch.multinomial(topk_probs, 1)
+            ids= torch.gather(topk_indices, -1, ids)
+            input_ids= torch.cat((input_ids, ids), dim= -1)
+            if ids.item() == eos.item(): 
+                print(" *eos")
+                break
             if input_ids.shape[1] == max_length: input_ids= input_ids[:, 1:]
 
-    return prompt+ " " + tokenizer.decode(input_ids[0].tolist())
+    return tokenizer.decode(input_ids[0].tolist())
 
 
 

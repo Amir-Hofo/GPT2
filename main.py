@@ -58,3 +58,10 @@ optimizer= torch.optim.AdamW(model.parameters(), lr= train_config.learning_rate)
 
 model_trainer= ModelTrainer(model, train_loader, valid_loader, optimizer, loss_fn, train_config, project_root)
 model_trainer.training()
+
+
+############## Text Generation ############
+prompt= "i am in danger"
+for _ in range(3):
+    text= model.text_generator(prompt, tokenizer,  max_length= 10, temperature= 1.5)
+    print(colored(prompt, "cyan"), text)
