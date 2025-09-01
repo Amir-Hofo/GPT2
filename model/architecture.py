@@ -1,5 +1,5 @@
 from packages import *
-from model.utils import text_generation_fn
+from utils.model_utils import text_generation_fn
 
 
 def scales_dot_product_attention_fn(Q, K, V):

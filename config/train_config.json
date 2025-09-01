@@ -1,5 +1,9 @@
 {
-  "learning_rate": 5e-5,
-  "total_tokens": 9e3,
-  "log_interval_tokens": 8e3
+  "learning_rate": 6e-4,
+  "betas": [0.9, 0.95],
+  "weight_decay": 0.1,
+  "fused": true,
+  "total_tokens": 450e6,
+  "log_interval_tokens": 22.5e6,
+  "sample_prompt": "In last"
 }

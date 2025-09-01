@@ -6,3 +6,4 @@ preprocessing/valid_loader.pt
 /model/__pycache__
 debug.py
 model/logs/best-model.pt
+/utils/__pycache__

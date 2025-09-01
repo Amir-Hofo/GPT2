@@ -1,4 +1,5 @@
 from packages import *
+from utils.main_utils import *
 from preprocessing import *
 from model import *
 
@@ -10,6 +11,7 @@ project_root= "./"
 preprocess_config= read_config("preprocess_config", project_root)
 model_config= read_config("model_config", project_root)
 train_config= read_config("train_config", project_root)
+generator_config= read_config("generator_config", project_root)
 
 ############## Preprocessing ##############
 print_title("Preprocessing")
@@ -19,18 +21,21 @@ dataset= dataset_loader_fn(preprocess_config)
 if os.path.exists(f"{project_root}preprocessing/custom_tokenizer_10K.json"):
     tokenizer= Tokenizer.from_file(f"{project_root}preprocessing/custom_tokenizer_10K.json")
 else: tokenizer= tokenizer_fn(dataset, preprocess_config, project_root)
+print("-- Tokenizer Done.   --")
 
 if os.path.exists(f"{project_root}preprocessing/train_loader.pt"):
-    train_loader= torch.load(f"{project_root}preprocessing/train_loader.pt")
+    train_loader= torch.load(f"{project_root}preprocessing/train_loader.pt", weights_only= False)
 else: 
     train_loader= data_preparation(dataset["train"], tokenizer, preprocess_config)
     torch.save(train_loader, f"{project_root}preprocessing/train_loader.pt")
+print("-- TrainLoader Done. --")
 
 if os.path.exists(f"{project_root}preprocessing/valid_loader.pt"):
-    valid_loader= torch.load(f"{project_root}preprocessing/valid_loader.pt")
+    valid_loader= torch.load(f"{project_root}preprocessing/valid_loader.pt", weights_only= False)
 else:
     valid_loader= data_preparation(dataset["validation"],tokenizer, preprocess_config, shuffle_st= False)
     torch.save(valid_loader, f"{project_root}preprocessing/valid_loader.pt")
+print("-- ValidLoader Done. --")
 
 print(10*"- ", "dataloader", 10*" -")
 print("train batch size:",train_loader.batch_size, ", num of batch:", len(train_loader))
@@ -44,7 +49,7 @@ print("sample data:", x.shape, y.shape)
 print_title("Model")
 
 
-model= GPT2Model(model_config)
+model= GPT2Model(model_config).to(device)
 model.device= device
 print("Number of model parameters: ", num_trainable_params(model),"M")
 print(model)
@@ -54,14 +59,23 @@ print(model)
 print_title("Training")
 
 loss_fn= nn.CrossEntropyLoss()
-optimizer= torch.optim.AdamW(model.parameters(), lr= train_config.learning_rate)
+optimizer= torch.optim.AdamW(model.parameters(), 
+                             lr= train_config.learning_rate,
+                             betas= train_config.betas,
+                             weight_decay= train_config.weight_decay,
+                             fused= train_config.fused)
 
-model_trainer= ModelTrainer(model, train_loader, valid_loader, optimizer, loss_fn, train_config, project_root)
+model_trainer= ModelTrainer(model, tokenizer, train_loader, valid_loader,
+                             optimizer, loss_fn, train_config, project_root, generator_config)
 model_trainer.training()
 
 
 ############## Text Generation ############
 prompt= "i am in danger"
+
 for _ in range(3):
-    text= model.text_generator(prompt, tokenizer,  max_length= 10, temperature= 1.5)
+    text= model.text_generator(prompt, tokenizer, 
+                               generator_config.max_length, 
+                               generator_config.temperature,
+                               generator_config.top_k)
     print(colored(prompt, "cyan"), text)

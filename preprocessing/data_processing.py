@@ -7,7 +7,7 @@ def dataset_loader_fn(config):
 
 
 def tokenizer_fn(dataset, config, project_root):
-    vocab_size, min_frequency= config.vocab_size, config.min_frequency
+    vocab_size, min_frequency= int(config.vocab_size), config.min_frequency
     save_tokenizer= config.save_tokenizer
     unk, eos= "|<unk>|", "<|endoftext|>"
 

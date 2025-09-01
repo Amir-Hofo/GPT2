@@ -1,13 +1,15 @@
 from packages import *
-from model.utils import Logger
-from model.utils import print_config_summary
+from utils.model_utils import Logger, print_config_summary
+
 
 class ModelTrainer():
-    def __init__(self, model, train_loader, valid_loader, optimizer, loss_fn, config, project_root):
+    def __init__(self, model, tokenizer, train_loader, valid_loader,
+                  optimizer, loss_fn, config, project_root, generator_config):
 
-        self.model, self.train_loader, self.valid_loader, self.device= model, train_loader, valid_loader, model.device
+        self.model, self.tokenizer, self.train_loader, self.valid_loader, self.device= model, tokenizer, train_loader, valid_loader, model.device
         self.optimizer, self.loss_fn, self.project_root= optimizer, loss_fn, project_root
         self.total_tokens, self.log_interval_tokens= int(config.total_tokens), int(config.log_interval_tokens)
+        self.training_config, self.generator_config= config, generator_config
         self.seen_tokens, self.token_eval_counter, self.basic_loss= 0, 0, float("inf")
         self.logger= Logger(self.model, self.optimizer, project_root, 'gpt2_tinystories')
         print_config_summary(self.model, self.optimizer, self.loss_fn, self.train_loader, 
@@ -42,7 +44,7 @@ class ModelTrainer():
                 pbar.update(num_tokens_this_batch)
 
                 if (self.token_eval_counter >= self.log_interval_tokens) or (self.seen_tokens >= self.total_tokens):
-                    loss_valid, self.token_eval_counte= self.evaluate(), 0
+                    self.token_eval_counter, loss_valid= 0, self.evaluate()
                     print(f"\nValid Loss: {loss_valid:.4f}")
 
                     self.logger.log(loss_train.compute().item(), loss_valid, self.seen_tokens)
@@ -51,6 +53,15 @@ class ModelTrainer():
                         torch.save(self.model, f"{self.project_root}model/gpt2_model.pt")
                         self.basic_loss= loss_valid
                         print("Validation loss improved, saving model...")
+
+                        text= self.model.text_generator(self.training_config.sample_prompt, 
+                                                        self.tokenizer, 
+                                                        self.generator_config.max_length, 
+                                                        self.generator_config.temperature,
+                                                        self.generator_config.top_k)
+                        print(100* ".", "\n")
+                        print(colored(self.training_config.sample_prompt, "cyan"), text, end= "")
+                        print("\n", 100* ".", "\n")
         
         self.logger.plot()
                         
@@ -64,5 +75,5 @@ class ModelTrainer():
                 logits= self.model(inputs)
                 loss= self.loss_fn(logits.view(-1, logits.shape[-1]), targets.flatten())
                 loss_valid.update(loss.item(), inputs.shape[0])
-                break
+        
         return loss_valid.compute().item()
